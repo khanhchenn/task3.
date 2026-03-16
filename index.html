@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hanoi Weather</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4f8; --card: #ffffff; --border: #e2e8f0;
+    --text-primary: #0f172a; --text-secondary: #64748b; --text-muted: #94a3b8;
+    --accent: #3b82f6; --accent-light: #eff6ff;
+    --shadow-lg: 0 10px 40px rgba(0,0,0,0.10); --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+    --radius: 16px; --radius-sm: 10px; --radius-pill: 999px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text-primary);
+    min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px;
+  }
+  .widget {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow-lg); width: 100%; max-width: 880px; overflow: hidden;
+    animation: fadeUp 0.5s ease;
+  }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+
+  /* Loading */
+  .loading-overlay {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 60px 28px; gap: 14px; color: var(--text-secondary); font-size: 14px;
+  }
+  .spinner {
+    width: 36px; height: 36px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-box { display: none; padding: 20px 28px; background: #fef2f2; color: #dc2626; font-size: 13px; border-top: 1px solid #fecaca; }
+
+  /* Header */
+  .header { padding: 24px 28px 20px; border-bottom: 1px solid var(--border); }
+  .location { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; }
+  .condition-time { font-size: 13px; color: var(--text-secondary); margin-top: 3px; }
+
+  /* Current */
+  .current {
+    padding: 24px 28px 20px; display: flex; align-items: center; gap: 20px;
+    border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .temp-block { display: flex; align-items: center; gap: 14px; }
+  .weather-icon { font-size: 56px; line-height: 1; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12)); animation: float 4s ease-in-out infinite; }
+  @keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-5px); } }
+  .temperature { font-size: 64px; font-weight: 700; letter-spacing: -3px; line-height: 1; }
+  .temp-unit { font-size: 28px; font-weight: 400; color: var(--text-secondary); vertical-align: super; letter-spacing: 0; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; margin-left: auto; }
+  .meta-item { font-size: 13px; color: var(--text-secondary); }
+  .meta-item span { color: var(--text-primary); font-weight: 500; }
+
+  /* Tabs */
+  .tabs { padding: 16px 28px; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .tab-btn {
+    display: flex; align-items: center; gap: 6px; padding: 7px 14px;
+    border-radius: var(--radius-pill); border: 1.5px solid var(--border); background: transparent;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); cursor: pointer; transition: all 0.18s ease; white-space: nowrap;
+  }
+  .tab-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+  .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Panels */
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* Hourly */
+  .hourly { padding: 20px 28px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .hourly-scroll { display: flex; gap: 0; min-width: max-content; }
+  .hour-item {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 12px 18px; border-right: 1px solid var(--border); min-width: 84px;
+    transition: background 0.15s; border-radius: var(--radius-sm); cursor: default;
+  }
+  .hour-item:last-child { border-right: none; }
+  .hour-item:hover { background: var(--accent-light); }
+  .hour-item.now { background: var(--accent-light); }
+  .hour-time { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+  .hour-val { font-size: 14px; font-weight: 600; color: var(--text-primary); font-family: 'DM Mono', monospace; }
+  .hour-icon { font-size: 20px; }
+
+  /* Forecast */
+  .forecast { padding: 20px 28px; }
+  .forecast-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+  .day-card {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 14px 8px; border-radius: var(--radius-sm); border: 1.5px solid var(--border);
+    background: var(--card); transition: all 0.18s; cursor: default;
+  }
+  .day-card:hover { border-color: var(--accent); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .day-card.today { border-color: var(--accent); background: var(--accent-light); }
+  .day-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+  .day-icon { font-size: 26px; }
+  .day-temps { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+  .day-high { font-size: 14px; font-weight: 700; }
+  .day-low { font-size: 12px; color: var(--text-muted); }
+
+  /* Precipitation */
+  .precip-section { padding: 20px 28px 8px; }
+  .precip-bars { display: flex; align-items: flex-end; gap: 4px; height: 110px; }
+  .precip-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
+  .precip-bar-wrap { width: 100%; display: flex; align-items: flex-end; height: 70px; }
+  .precip-bar { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; opacity: 0.75; min-height: 3px; transition: height 0.4s ease; }
+  .precip-pct { font-size: 10px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
+  .precip-time { font-size: 10px; color: var(--text-muted); }
+
+  /* Wind */
+  .wind-panel { padding: 20px 28px; }
+  .wind-compass { display: flex; align-items: center; justify-content: center; gap: 32px; flex-wrap: wrap; }
+  .compass {
+    width: 130px; height: 130px; border-radius: 50%; border: 2px solid var(--border);
+    position: relative; display: flex; align-items: center; justify-content: center; background: var(--accent-light);
+  }
+  .compass-arrow {
+    position: absolute; width: 4px; height: 44px;
+    background: linear-gradient(to bottom, var(--accent), transparent);
+    border-radius: 2px; top: 14px; left: 50%; transform-origin: bottom center; transition: transform 0.5s ease;
+  }
+  .compass-dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; z-index: 1; }
+  .compass-label { font-size: 10px; font-weight: 700; color: var(--text-muted); position: absolute; }
+  .compass-label.N { top: 6px; left: 50%; transform: translateX(-50%); }
+  .compass-label.S { bottom: 6px; left: 50%; transform: translateX(-50%); }
+  .compass-label.E { right: 8px; top: 50%; transform: translateY(-50%); }
+  .compass-label.W { left: 8px; top: 50%; transform: translateY(-50%); }
+  .wind-stats { display: flex; flex-direction: column; gap: 10px; }
+  .wind-stat { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 10px 16px; border-radius: var(--radius-sm); background: var(--bg); min-width: 200px; }
+  .wind-stat-label { font-size: 13px; color: var(--text-secondary); }
+  .wind-stat-val { font-size: 14px; font-weight: 600; font-family: 'DM Mono', monospace; }
+
+  /* Air Quality */
+  .aq-panel { padding: 20px 28px; }
+  .aqi-score { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+  .aqi-num { font-size: 48px; font-weight: 700; letter-spacing: -2px; }
+  .aqi-label { font-size: 14px; color: var(--text-secondary); }
+  .aqi-label strong { display: block; font-size: 18px; }
+  .pollutants { display: flex; flex-wrap: wrap; gap: 10px; }
+  .pollutant { flex: 1; min-width: 120px; background: var(--bg); border-radius: var(--radius-sm); padding: 12px 14px; }
+  .pollutant-name { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .pollutant-val { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: 'DM Mono', monospace; }
+  .pollutant-unit { font-size: 10px; color: var(--text-muted); }
+
+  /* UV */
+  .uv-panel { padding: 20px 28px; }
+  .uv-bar-wrap { background: var(--bg); border-radius: var(--radius-sm); height: 14px; overflow: hidden; margin-bottom: 12px; position: relative; }
+  .uv-bar { height: 100%; background: linear-gradient(to right, #34d399, #fbbf24, #f97316, #ef4444, #7c3aed); border-radius: var(--radius-sm); width: 100%; position: relative; }
+  .uv-marker { position: absolute; width: 18px; height: 18px; background: white; border: 3px solid var(--text-primary); border-radius: 50%; top: -2px; transform: translateX(-50%); transition: left 0.5s ease; }
+  .uv-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+  .uv-info { margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .uv-badge { padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; background: var(--accent-light); color: var(--accent); }
+
+  /* Sunrise */
+  .sun-panel { padding: 20px 28px; }
+  .sun-arc { position: relative; height: 120px; margin-bottom: 16px; }
+  .sun-arc svg { width: 100%; }
+  .sun-times { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .sun-time-card { flex: 1; min-width: 120px; background: var(--bg); border-radius: var(--radius-sm); padding: 14px 16px; text-align: center; }
+  .sun-time-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sun-time-val { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: 'DM Mono', monospace; }
+  .sun-time-icon { font-size: 22px; margin-bottom: 4px; }
+
+  .section-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; font-weight: 500; }
+  .last-updated { padding: 10px 28px 16px; font-size: 11px; color: var(--text-muted); text-align: right; }
+
+  @media (max-width: 600px) {
+    .forecast-grid { grid-template-columns: repeat(4, 1fr); }
+    .temperature { font-size: 48px; }
+  }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <span>Fetching live weather for Hanoi...</span>
+  </div>
+  <div class="error-box" id="errorBox"></div>
+
+  <div id="mainContent" style="display:none">
+    <div class="header">
+      <div class="location">📍 Hanoi, Vietnam</div>
+      <div class="condition-time" id="conditionTime">—</div>
+    </div>
+
+    <div class="current">
+      <div class="temp-block">
+        <div class="weather-icon" id="mainIcon">—</div>
+        <div class="temperature" id="currentTemp">—<span class="temp-unit">°F</span></div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-item">Precipitation: <span id="precipVal">—</span></div>
+        <div class="meta-item">Humidity: <span id="humidVal">—</span></div>
+        <div class="meta-item">Wind: <span id="windVal">—</span></div>
+        <div class="meta-item">UV Index: <span id="uvVal">—</span></div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(this,'temperature')">🌡 Temperature</button>
+      <button class="tab-btn" onclick="switchTab(this,'precipitation')">🌧 Precipitation</button>
+      <button class="tab-btn" onclick="switchTab(this,'wind')">💨 Wind</button>
+      <button class="tab-btn" onclick="switchTab(this,'airquality')">🌫 Air Quality</button>
+      <button class="tab-btn" onclick="switchTab(this,'uv')">☀️ UV Index</button>
+      <button class="tab-btn" onclick="switchTab(this,'sunrise')">🌅 Sunset &amp; Sunrise</button>
+    </div>
+
+    <!-- Temperature -->
+    <div id="panel-temperature" class="panel active">
+      <div class="hourly"><div class="hourly-scroll" id="hourlyStrip"></div></div>
+      <div class="forecast"><div class="forecast-grid" id="forecastGrid"></div></div>
+    </div>
+
+    <!-- Precipitation -->
+    <div id="panel-precipitation" class="panel">
+      <div class="precip-section">
+        <div class="section-label">Hourly Precipitation Probability</div>
+        <div class="precip-bars" id="precipBars"></div>
+      </div>
+    </div>
+
+    <!-- Wind -->
+    <div id="panel-wind" class="panel">
+      <div class="wind-panel">
+        <div class="wind-compass">
+          <div class="compass">
+            <div class="compass-label N">N</div><div class="compass-label S">S</div>
+            <div class="compass-label E">E</div><div class="compass-label W">W</div>
+            <div class="compass-arrow" id="windArrow"></div>
+            <div class="compass-dot"></div>
+          </div>
+          <div class="wind-stats">
+            <div class="wind-stat"><span class="wind-stat-label">Speed</span><span class="wind-stat-val" id="ws1">—</span></div>
+            <div class="wind-stat"><span class="wind-stat-label">Gusts</span><span class="wind-stat-val" id="ws2">—</span></div>
+            <div class="wind-stat"><span class="wind-stat-label">Direction</span><span class="wind-stat-val" id="ws3">—</span></div>
+          </div>
+        </div>
+        <div style="margin-top:20px">
+          <div class="section-label">Wind Speed — Next 12 Hours</div>
+          <div style="overflow-x:auto"><div class="hourly-scroll" id="windStrip"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Air Quality -->
+    <div id="panel-airquality" class="panel">
+      <div class="aq-panel">
+        <div class="aqi-score">
+          <div class="aqi-num" id="aqiNum">—</div>
+          <div class="aqi-label" id="aqiLabel"><strong>—</strong>Loading...</div>
+        </div>
+        <div class="pollutants" id="pollutantsGrid"></div>
+      </div>
+    </div>
+
+    <!-- UV Index -->
+    <div id="panel-uv" class="panel">
+      <div class="uv-panel">
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">Current UV Index: <strong id="uvLabel">—</strong></div>
+        <div class="uv-bar-wrap">
+          <div class="uv-bar"><div class="uv-marker" id="uvMarker" style="left:5%"></div></div>
+        </div>
+        <div class="uv-labels">
+          <span>0–2 Low</span><span>3–5 Moderate</span><span>6–7 High</span><span>8–10 Very High</span><span>11+ Extreme</span>
+        </div>
+        <div class="uv-info" id="uvInfo"></div>
+        <div style="margin-top:20px">
+          <div class="section-label">UV Index — Today's Forecast</div>
+          <div style="overflow-x:auto"><div class="hourly-scroll" id="uvStrip"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sunrise/Sunset -->
+    <div id="panel-sunrise" class="panel">
+      <div class="sun-panel">
+        <div class="sun-arc">
+          <svg id="sunArcSvg" viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg">
+            <line x1="20" y1="100" x2="380" y2="100" stroke="#e2e8f0" stroke-width="1.5"/>
+            <path d="M 40 100 Q 200 10 360 100" fill="none" stroke="#fbbf24" stroke-width="2" stroke-dasharray="5,3"/>
+            <circle id="sunDot" cx="200" cy="55" r="10" fill="#fbbf24" opacity="0.9"/>
+            <circle id="sunGlow" cx="200" cy="55" r="16" fill="#fbbf24" opacity="0.2"/>
+            <text id="riseLabel" x="40" y="116" font-family="DM Mono" font-size="10" fill="#94a3b8" text-anchor="middle">—</text>
+            <text id="setLabel" x="360" y="116" font-family="DM Mono" font-size="10" fill="#94a3b8" text-anchor="middle">—</text>
+          </svg>
+        </div>
+        <div class="sun-times" id="sunTimes"></div>
+      </div>
+    </div>
+
+    <div class="last-updated" id="lastUpdated"></div>
+  </div>
+</div>
+
+<script>
+const LAT = 21.0285, LON = 105.8542, TZ = 'Asia/Bangkok';
+
+const WMO = {
+  0:['Clear sky','☀️'],1:['Mainly clear','🌤'],2:['Partly cloudy','⛅'],3:['Overcast','☁️'],
+  45:['Fog','🌫'],48:['Icy fog','🌫'],51:['Light drizzle','🌦'],53:['Drizzle','🌦'],55:['Heavy drizzle','🌧'],
+  61:['Light rain','🌧'],63:['Rain','🌧'],65:['Heavy rain','🌧'],71:['Light snow','🌨'],73:['Snow','❄️'],
+  75:['Heavy snow','❄️'],80:['Light showers','🌦'],81:['Showers','🌧'],82:['Heavy showers','⛈'],
+  95:['Thunderstorm','⛈'],96:['Thunderstorm w/ hail','⛈'],99:['Thunderstorm w/ heavy hail','⛈']
+};
+const getWMO = c => WMO[c] || ['Unknown','🌡'];
+const toF = c => Math.round(c * 9/5 + 32);
+const toMph = ms => Math.round(ms * 2.237);
+const degToCompass = d => ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(d/22.5)%16];
+const fmtHour = s => { const d=new Date(s),h=d.getHours(); return `${h%12||12}${h>=12?'pm':'am'}`; };
+const fmtTime = s => new Date(s).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+const uvInfo = v => {
+  if(v<=2) return ['Low','🕶 No special protection needed'];
+  if(v<=5) return ['Moderate','🧴 Apply SPF 30+ sunscreen'];
+  if(v<=7) return ['High','🧴 SPF 50+, seek shade midday'];
+  if(v<=10) return ['Very High','⚠️ Avoid outdoor activity at midday'];
+  return ['Extreme','🚫 Stay indoors if possible'];
+};
+const aqiLevel = a => {
+  if(a<=50) return ['Good','#34d399'];
+  if(a<=100) return ['Moderate','#fbbf24'];
+  if(a<=150) return ['Unhealthy for Sensitive Groups','#f97316'];
+  if(a<=200) return ['Unhealthy','#ef4444'];
+  if(a<=300) return ['Very Unhealthy','#7c3aed'];
+  return ['Hazardous','#991b1b'];
+};
+
+let weatherData = null;
+let currentTab = 'temperature';
+
+function nowIdx(times) {
+  const now = new Date();
+  const i = times.findIndex(t => new Date(t) >= now);
+  return Math.max(0, i === -1 ? times.length-1 : i-1);
+}
+
+function switchTab(btn, tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-'+tab).classList.add('active');
+  currentTab = tab;
+  renderHourly(tab);
+  if(tab==='precipitation') renderPrecipBars();
+  if(tab==='wind') renderWind();
+  if(tab==='uv') renderUV();
+}
+
+function renderHourly(tab) {
+  if(!weatherData) return;
+  const {hourly} = weatherData.main;
+  const ni = nowIdx(hourly.time);
+  const strip = document.getElementById('hourlyStrip');
+  strip.innerHTML = hourly.time.slice(ni, ni+12).map((t,i) => {
+    const idx = ni+i;
+    let val, icon;
+    if(tab==='temperature'||tab==='airquality'||tab==='sunrise') {
+      val = toF(hourly.temperature_2m[idx])+'°'; icon = getWMO(hourly.weather_code[idx])[1];
+    } else if(tab==='precipitation') {
+      val = (hourly.precipitation_probability[idx]??0)+'%'; icon = '🌧';
+    } else if(tab==='wind') {
+      val = toMph(hourly.wind_speed_10m[idx])+' mph'; icon = '💨';
+    } else if(tab==='uv') {
+      val = (hourly.uv_index?.[idx]??0).toFixed(1); icon = '☀️';
+    } else {
+      val = toF(hourly.temperature_2m[idx])+'°'; icon = getWMO(hourly.weather_code[idx])[1];
+    }
+    return `<div class="hour-item ${i===0?'now':''}">
+      <div class="hour-time">${i===0?'Now':fmtHour(t)}</div>
+      <div class="hour-val">${val}</div>
+      <div class="hour-icon">${icon}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderForecast() {
+  const {daily} = weatherData.main;
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  document.getElementById('forecastGrid').innerHTML = daily.time.map((t,i) => {
+    const d = new Date(t);
+    const [,icon] = getWMO(daily.weather_code[i]);
+    return `<div class="day-card ${i===0?'today':''}">
+      <div class="day-name">${i===0?'Today':days[d.getDay()]}</div>
+      <div class="day-icon">${icon}</div>
+      <div class="day-temps">
+        <div class="day-high">${toF(daily.temperature_2m_max[i])}°</div>
+        <div class="day-low">${toF(daily.temperature_2m_min[i])}°</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPrecipBars() {
+  if(!weatherData) return;
+  const {hourly} = weatherData.main;
+  const ni = nowIdx(hourly.time);
+  document.getElementById('precipBars').innerHTML = hourly.time.slice(ni, ni+12).map((t,i) => {
+    const pct = hourly.precipitation_probability[ni+i] ?? 0;
+    return `<div class="precip-col">
+      <div class="precip-pct">${pct}%</div>
+      <div class="precip-bar-wrap"><div class="precip-bar" style="height:${Math.max(3,pct*0.68)}px"></div></div>
+      <div class="precip-time">${i===0?'Now':fmtHour(t)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderWind() {
+  if(!weatherData) return;
+  const {current, hourly} = weatherData.main;
+  const speed = toMph(current.wind_speed_10m);
+  const gust = toMph(current.wind_gusts_10m ?? current.wind_speed_10m*1.4);
+  const dir = current.wind_direction_10m;
+  document.getElementById('ws1').textContent = speed+' mph';
+  document.getElementById('ws2').textContent = gust+' mph';
+  document.getElementById('ws3').textContent = degToCompass(dir)+' ('+dir+'°)';
+  document.getElementById('windArrow').style.transform = `translateX(-50%) rotate(${dir}deg)`;
+
+  const ni = nowIdx(hourly.time);
+  document.getElementById('windStrip').innerHTML = hourly.time.slice(ni, ni+12).map((t,i) => {
+    return `<div class="hour-item ${i===0?'now':''}">
+      <div class="hour-time">${i===0?'Now':fmtHour(t)}</div>
+      <div class="hour-val">${toMph(hourly.wind_speed_10m[ni+i])} mph</div>
+      <div class="hour-icon">💨</div>
+    </div>`;
+  }).join('');
+}
+
+function renderAirQuality() {
+  if(!weatherData?.air) {
+    document.getElementById('aqiLabel').innerHTML = '<strong>N/A</strong>Air quality data unavailable.';
+    return;
+  }
+  const air = weatherData.air;
+  const ni = nowIdx(air.hourly.time);
+  const pm25 = (air.hourly.pm2_5[ni]??0).toFixed(1);
+  const pm10 = (air.hourly.pm10[ni]??0).toFixed(1);
+  const o3 = (air.hourly.ozone[ni]??0).toFixed(1);
+  const no2 = (air.hourly.nitrogen_dioxide[ni]??0).toFixed(1);
+  const so2 = (air.hourly.sulphur_dioxide[ni]??0).toFixed(1);
+  const co = ((air.hourly.carbon_monoxide[ni]??0)/1000).toFixed(2);
+  const aqi = air.hourly.us_aqi[ni] ?? 0;
+  const [lvl, color] = aqiLevel(aqi);
+
+  document.getElementById('aqiNum').textContent = aqi;
+  document.getElementById('aqiNum').style.color = color;
+  document.getElementById('aqiLabel').innerHTML = `<strong style="color:${color}">${lvl}</strong>${aqi<=50?'Air quality is satisfactory. Little or no risk.':'Take precautions if sensitive to air pollution.'}`;
+  document.getElementById('pollutantsGrid').innerHTML = [
+    ['PM2.5',pm25,'µg/m³'],['PM10',pm10,'µg/m³'],['O₃',o3,'µg/m³'],
+    ['NO₂',no2,'µg/m³'],['SO₂',so2,'µg/m³'],['CO',co,'mg/m³']
+  ].map(([n,v,u]) => `<div class="pollutant">
+    <div class="pollutant-name">${n}</div>
+    <div class="pollutant-val">${v}<span class="pollutant-unit"> ${u}</span></div>
+  </div>`).join('');
+}
+
+function renderUV() {
+  if(!weatherData) return;
+  const {hourly, daily} = weatherData.main;
+  const ni = nowIdx(hourly.time);
+  const uvi = hourly.uv_index?.[ni] ?? 0;
+  const [lvl, tip] = uvInfo(uvi);
+  document.getElementById('uvLabel').textContent = `${uvi.toFixed(1)} — ${lvl}`;
+  document.getElementById('uvMarker').style.left = Math.min(95,(uvi/11)*100)+'%';
+  document.getElementById('uvInfo').innerHTML =
+    `<div class="uv-badge">${tip}</div><div class="uv-badge">☀️ Max today: ${(daily.uv_index_max?.[0]??0).toFixed(1)}</div>`;
+
+  // Today's UV hourly
+  const todayDate = hourly.time[0].slice(0,10);
+  const dayStart = hourly.time.findIndex(t => t.startsWith(todayDate) && new Date(t).getHours()===6);
+  const s = Math.max(0, dayStart);
+  document.getElementById('uvStrip').innerHTML = hourly.time.slice(s, s+14).map((t,i) => {
+    const v = (hourly.uv_index?.[s+i]??0).toFixed(1);
+    const isNow = (s+i) === ni;
+    return `<div class="hour-item ${isNow?'now':''}">
+      <div class="hour-time">${isNow?'Now':fmtHour(t)}</div>
+      <div class="hour-val">${v}</div>
+      <div class="hour-icon">☀️</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSunrise() {
+  if(!weatherData) return;
+  const {daily} = weatherData.main;
+  const rise = daily.sunrise[0], set = daily.sunset[0];
+  const riseD = new Date(rise), setD = new Date(set);
+  const noonD = new Date((riseD.getTime()+setD.getTime())/2);
+  const dayMin = Math.round((setD-riseD)/60000);
+  const dayLen = `${Math.floor(dayMin/60)}h ${dayMin%60}m`;
+
+  const now = new Date();
+  const prog = Math.max(0, Math.min(1, (now-riseD)/(setD-riseD)));
+  const arcX = 40 + 320*prog;
+  const arcY = 100 - Math.sin(Math.PI*prog)*90;
+  document.getElementById('sunDot').setAttribute('cx', arcX);
+  document.getElementById('sunDot').setAttribute('cy', arcY);
+  document.getElementById('sunGlow').setAttribute('cx', arcX);
+  document.getElementById('sunGlow').setAttribute('cy', arcY);
+  document.getElementById('riseLabel').textContent = fmtTime(rise);
+  document.getElementById('setLabel').textContent = fmtTime(set);
+
+  document.getElementById('sunTimes').innerHTML = `
+    <div class="sun-time-card"><div class="sun-time-icon">🌅</div><div class="sun-time-label">Sunrise</div><div class="sun-time-val">${fmtTime(rise)}</div></div>
+    <div class="sun-time-card"><div class="sun-time-icon">☀️</div><div class="sun-time-label">Solar Noon</div><div class="sun-time-val">${fmtTime(noonD.toISOString())}</div></div>
+    <div class="sun-time-card"><div class="sun-time-icon">🌇</div><div class="sun-time-label">Sunset</div><div class="sun-time-val">${fmtTime(set)}</div></div>
+    <div class="sun-time-card"><div class="sun-time-icon">🌙</div><div class="sun-time-label">Day Length</div><div class="sun-time-val">${dayLen}</div></div>`;
+}
+
+function renderAll() {
+  const {current} = weatherData.main;
+  const now = new Date();
+  const [cond] = getWMO(current.weather_code);
+  document.getElementById('conditionTime').textContent =
+    `${cond} · ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}`;
+  document.getElementById('mainIcon').textContent = getWMO(current.weather_code)[1];
+  document.getElementById('currentTemp').innerHTML = `${toF(current.temperature_2m)}<span class="temp-unit">°F</span>`;
+  document.getElementById('precipVal').textContent = (current.precipitation??0)+' mm';
+  document.getElementById('humidVal').textContent = current.relative_humidity_2m+'%';
+  document.getElementById('windVal').textContent = toMph(current.wind_speed_10m)+' mph';
+  document.getElementById('uvVal').textContent = (current.uv_index??0).toFixed(1);
+
+  renderHourly(currentTab);
+  renderForecast();
+  renderPrecipBars();
+  renderWind();
+  renderAirQuality();
+  renderUV();
+  renderSunrise();
+
+  document.getElementById('lastUpdated').textContent =
+    `Live data from Open-Meteo · Last updated: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}`;
+}
+
+async function fetchWeather() {
+  try {
+    const main = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}`+
+      `&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,`+
+      `wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index`+
+      `&hourly=temperature_2m,precipitation_probability,weather_code,`+
+      `wind_speed_10m,wind_direction_10m,uv_index`+
+      `&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset,uv_index_max`+
+      `&forecast_days=7&timezone=${TZ}`
+    );
+    if(!main.ok) throw new Error(`HTTP ${main.status}`);
+    const mainData = await main.json();
+
+    let airData = null;
+    try {
+      const air = await fetch(
+        `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${LAT}&longitude=${LON}`+
+        `&hourly=pm2_5,pm10,ozone,nitrogen_dioxide,sulphur_dioxide,carbon_monoxide,us_aqi`+
+        `&timezone=${TZ}`
+      );
+      if(air.ok) airData = await air.json();
+    } catch(_) {}
+
+    weatherData = { main: mainData, air: airData };
+    document.getElementById('loadingOverlay').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'block';
+    renderAll();
+  } catch(err) {
+    document.getElementById('loadingOverlay').style.display = 'none';
+    const eb = document.getElementById('errorBox');
+    eb.style.display = 'block';
+    eb.textContent = `⚠️ Failed to load weather data: ${err.message}. Please check your internet connection and reload the page.`;
+  }
+}
+
+fetchWeather();
+setInterval(fetchWeather, 10*60*1000);
+setInterval(() => {
+  if(weatherData) {
+    const now = new Date();
+    const [cond] = getWMO(weatherData.main.current.weather_code);
+    document.getElementById('conditionTime').textContent =
+      `${cond} · ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}`;
+  }
+}, 60000);
+</script>
+</body>
+</html>
